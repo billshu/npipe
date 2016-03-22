@@ -26,7 +26,7 @@ func ExampleDial() {
 
 // Use Listen to start a server, and accept connections with Accept().
 func ExampleListen() {
-	ln, err := npipe.Listen(`\\.\pipe\mypipe`)
+	ln, err := npipe.Listen(`\\.\pipe\mypipe`, npipe.AllowEveryone)
 	if err != nil {
 		// handle error
 	}

@@ -253,8 +253,12 @@ func dial(address string, timeout uint32) (*PipeConn, error) {
 // The address must be of the form \\.\pipe\<name>
 //
 // Listen will return a PipeError for an incorrectly formatted pipe name.
-func Listen(address string) (*PipeListener, error) {
-	handle, err := createPipe(address, true)
+func Listen(address string, SDDL ...string) (*PipeListener, error) {
+	var sddl string
+	if len(SDDL) > 0 {
+		sddl = SDDL[0]
+	}
+	handle, err := createPipe(address, true, sddl)
 	if err == error_invalid_name {
 		return nil, badAddr(address)
 	}
@@ -295,7 +299,7 @@ func (l *PipeListener) AcceptPipe() (*PipeConn, error) {
 	handle := l.handle
 	if handle == 0 {
 		var err error
-		handle, err = createPipe(string(l.addr), false)
+		handle, err = createPipe(string(l.addr), false, ``)
 		if err != nil {
 			return nil, err
 		}
@@ -463,7 +467,7 @@ func (a PipeAddr) String() string {
 // with the same arguments, since subsequent calls to create pipe need
 // to use the same arguments as the first one. If first is set, fail
 // if the pipe already exists.
-func createPipe(address string, first bool) (syscall.Handle, error) {
+func createPipe(address string, first bool, SDDL string) (syscall.Handle, error) {
 	n, err := syscall.UTF16PtrFromString(address)
 	if err != nil {
 		return 0, err
@@ -473,9 +477,12 @@ func createPipe(address string, first bool) (syscall.Handle, error) {
 		mode |= file_flag_first_pipe_instance
 	}
 	
-	sa, err := initSecurityAttributes()
+	sa, err := initSecurityAttributes(SDDL)
 	if err != nil {
 		return 0, err
+	}
+	if 0 != sa.SecurityDescriptor {
+		defer syscall.LocalFree((syscall.Handle)(sa.SecurityDescriptor))
 	}
 	
 	return createNamedPipe(n,

@@ -1,46 +1,35 @@
 package npipe
 
 import (
-	"os"
 	"syscall"
 	"unsafe"
 )
 
-const SECURITY_DESCRIPTOR_REVISION = 1
+const SDDL_REVISION_1 = 1
+const AllowEveryone = `D:(A;;FA;;;WD)`
+const AllowAnonymous = `D:(A;;FA;;;AN)`
 
 var (
-	advapi32                         = syscall.NewLazyDLL("advapi32.dll")
-	procInitializeSecurityDescriptor = advapi32.NewProc("InitializeSecurityDescriptor")
-	procSetSecurityDescriptorDacl    = advapi32.NewProc("SetSecurityDescriptorDacl")
+	advapi32 = syscall.NewLazyDLL("advapi32.dll")
+	procConvertStringSecurityDescriptorToSecurityDescriptor = advapi32.NewProc(`ConvertStringSecurityDescriptorToSecurityDescriptorW`)
 )
 
-func initSecurityAttributes() (*syscall.SecurityAttributes, error) {
-
-	// create security descriptor
-	sd := make([]byte, 4096)
-	if res, _, err := procInitializeSecurityDescriptor.Call(
-		uintptr(unsafe.Pointer(&sd[0])),
-		SECURITY_DESCRIPTOR_REVISION); int(res) == 0 {
-
-		return nil, os.NewSyscallError("InitializeSecurityDescriptor", err)
-	}
-
-	// configure security descriptor
-	present := 1
-	defaulted := 0
-	if res, _, err := procSetSecurityDescriptorDacl.Call(
-		uintptr(unsafe.Pointer(&sd[0])),
-		uintptr(present),
-		uintptr(unsafe.Pointer(nil)), // acl
-		uintptr(defaulted)); int(res) == 0 {
-
-		return nil, os.NewSyscallError("SetSecurityDescriptorDacl", err)
-	}
-
+func initSecurityAttributes(SDDL string) (*syscall.SecurityAttributes, error) {
 	var sa syscall.SecurityAttributes
 	sa.Length = uint32(unsafe.Sizeof(sa))
-	sa.SecurityDescriptor = uintptr(unsafe.Pointer(&sd[0]))
-
+	if `` != SDDL {
+		u, err := syscall.UTF16PtrFromString(SDDL)
+		if nil != err {
+			return nil, err
+		}
+		r0, _, err := procConvertStringSecurityDescriptorToSecurityDescriptor.Call(
+			uintptr(unsafe.Pointer(u)),
+			SDDL_REVISION_1,
+			uintptr(unsafe.Pointer(&sa.SecurityDescriptor)),
+			uintptr(0))
+		if 0 == r0 {
+			return nil, err
+		}
+	}
 	return &sa, nil
-
 }
